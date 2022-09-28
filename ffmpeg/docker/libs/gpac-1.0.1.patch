@@ -1,0 +1,11 @@
+--- applications/mp4client/main.c.org	2022-09-19 05:26:32.500107781 +0000
++++ applications/mp4client/main.c	2022-09-19 05:26:52.702467860 +0000
+@@ -130,7 +130,7 @@
+ static HWND console_hwnd = NULL;
+ static Bool owns_wnd = GF_FALSE;
+ #include <tlhelp32.h>
+-#include <Psapi.h>
++#include <psapi.h>
+ static DWORD getParentPID(DWORD pid)
+ {
+ 	DWORD ppid = 0;

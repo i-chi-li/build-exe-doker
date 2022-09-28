@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  apt-cacher-ng:
+    build:
+      context: docker
+      dockerfile: Dockerfile
+    ports:
+      - target: 3142
+        published: 3142
+    volumes:
+      - type: volume
+        source: apt-cacher-ng
+        target: /var/cache/apt-cacher-ng
+volumes:
+  apt-cacher-ng:

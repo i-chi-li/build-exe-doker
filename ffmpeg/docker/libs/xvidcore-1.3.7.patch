@@ -1,0 +1,16 @@
+--- configure.org	2022-09-23 04:20:06.409113091 +0000
++++ configure	2022-09-23 04:56:31.319101049 +0000
+@@ -4392,10 +4392,10 @@
+      [cC][yY][gG][wW][iI][nN]*|mingw32*|mks*)
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ok" >&5
+ $as_echo "ok" >&6; }
+-	STATIC_LIB="xvidcore.\$(STATIC_EXTENSION)"
+-	SHARED_LIB="xvidcore.\$(SHARED_EXTENSION)"
++	STATIC_LIB="libxvidcore.\$(STATIC_EXTENSION)"
++	SHARED_LIB="libxvidcore.\$(SHARED_EXTENSION)"
+ 	SPECIFIC_LDFLAGS="-shared -Wl,--dll,--out-implib,\$@.a libxvidcore.def"
+-	SPECIFIC_CFLAGS="-mno-cygwin"
++	SPECIFIC_CFLAGS=""
+ 	;;
+      darwin*)
+ 	STATIC_LIB="libxvidcore.\$(STATIC_EXTENSION)"

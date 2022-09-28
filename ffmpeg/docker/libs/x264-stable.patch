@@ -1,0 +1,11 @@
+--- Makefile.org	2022-09-27 07:28:20.155833169 +0000
++++ Makefile	2022-09-27 07:08:33.779577044 +0000
+@@ -364,7 +364,7 @@
+ else
+ fprofiled: clean
+ 	$(MAKE) x264$(EXE) CFLAGSPROF="$(PROF_GEN_CC)" LDFLAGSPROF="$(PROF_GEN_LD)"
+-	$(foreach V, $(VIDS), $(foreach I, 0 1 2 3 4 5 6 7, ./x264$(EXE) $(OPT$I) --threads 1 $(V) -o $(DEVNULL) ;))
++	$(foreach V, $(VIDS), $(foreach I, 0 1 2 3 4 5 6 7, wine ./x264$(EXE) $(OPT$I) --threads 1 $(V) -o $(DEVNULL) ;))
+ ifeq ($(COMPILER),CL)
+ # Because Visual Studio timestamps the object files within the PGD, it fails to build if they change - only the executable should be deleted
+ 	rm -f x264$(EXE)

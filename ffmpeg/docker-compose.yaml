@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  ffmpeg:
+    build:
+      context: docker
+      dockerfile: Dockerfile
+    volumes:
+      - type: volume
+        source: ccache
+        target: /root/.ccache
+    command: tail -f /dev/null
+volumes:
+  ccache:
