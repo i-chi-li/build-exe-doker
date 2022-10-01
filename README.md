@@ -96,6 +96,7 @@ docker run --rm -v apt_cacher_ng:/src -v apt-cacher-ng_apt-cacher-ng:/dst alpine
 # 利用ライブラリ
 
 - [akiyo_cif.y4m](https://media.xiph.org/video/derf/)
+- [AMF-1.4.26.tar.gz](https://github.com/GPUOpen-LibrariesAndSDKs/AMF)
 - [aom-bcfe6fbfed315f83ee8a95465c654ee8078dbff9.tar.gz](https://aomedia.googlesource.com/aom/)
 - [AviSynthPlus-3.7.2.tar.gz](https://avs-plus.net/)
 - [bzip2-1.0.8.tar.gz](https://sourceware.org/bzip2/)
@@ -118,6 +119,8 @@ docker run --rm -v apt_cacher_ng:/src -v apt-cacher-ng_apt-cacher-ng:/dst alpine
 - [libvpx-1.12.0.tar.gz](https://chromium.googlesource.com/webm/libvpx)
 - [libwebp-1.2.4.tar.gz](https://developers.google.com/speed/webp)
 - [nettle-3.8.tar.gz](https://www.lysator.liu.se/~nisse/nettle/) (gnutls の依存ライブラリ)
+- [OpenCL-Headers-2022.09.23.tar.gz](https://github.com/KhronosGroup/OpenCL-Headers/) (OpenCL-ICD-Loader の依存ライブラリ)
+- [OpenCL-ICD-Loader-2022.09.23.tar.gz](https://github.com/KhronosGroup/OpenCL-ICD-Loader)
 - [opencore-amr-0.1.6.tar.gz](https://sourceforge.net/projects/opencore-amr/)
 - [openjpeg-2.5.0.tar.gz](http://www.openjpeg.org/)
 - [rtmpdump-f1b83c1.tar.gz](http://rtmpdump.mplayerhq.hu/)

@@ -55,19 +55,54 @@ COPY libs/ /root/ffmpeg-build/
 WORKDIR /root/ffmpeg-build
 
 # 各ソース圧縮ファイルを解凍
-RUN find ./ -type f \( -name "*.tar.gz" -or -name "*.tgz" \) -not \( -name "libvpx-1.12.0.tar.gz" -or -name "aom-3.5.0.tar.gz" \) | xargs -n 1 tar zxf \
+RUN cat AMF-1.4.26.tar.gz.* >> AMF-1.4.26.tar.gz \
+ && find -mindepth 1 -maxdepth 1 -type f -name "*.tar.gz" -not \( -name "libvpx-1.12.0.tar.gz" -or -name "aom-3.5.0.tar.gz" \) | xargs -n 1 tar zxf \
  && mkdir libvpx \
  && tar zxf libvpx-1.12.0.tar.gz -C libvpx \
  && mkdir aom \
  && tar zxf aom-3.5.0.tar.gz -C aom \
- && find ./ -type f -name "*.tar.bz2" | xargs -n 1 tar jxf \
- && find ./ -type f -name "*.tar.xz" | xargs -n 1 tar Jxf \
- && find ./ -type f -name "*.zip" | xargs -n 1 unzip
+ && find -mindepth 1 -maxdepth 1 -type f -name "*.tar.bz2" | xargs -n 1 tar jxf \
+ && find -mindepth 1 -maxdepth 1 -type f -name "*.tar.xz" | xargs -n 1 tar Jxf \
+ && find -mindepth 1 -maxdepth 1 -type f -name "*.zip" | xargs -n 1 unzip
 
 RUN --mount=type=cache,target=/root/.ccache \
     set -eu \
 # ccache を有効化
  && export PATH="/usr/lib/ccache:$PATH" \
+# OpenCL Headers \
+ && cd OpenCL-Headers-2022.09.23 \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
+ && cmake --build ./build -- -j6 \
+ && checkinstall --pkgname=opencl-headers-mingw-w64-x86-64 \
+    --pkgversion="2022.09.23.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# OpenCL ICD Loader
+ && cd OpenCL-ICD-Loader-2022.09.23 \
+ && patch -p0 < ../OpenCL-ICD-Loader-2022.09.23.patch \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -DCMAKE_PREFIX_PATH=/usr/x86_64-w64-mingw32/include \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
+    -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native -DWINVER=0x0A00" \
+    -DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=OFF \
+ && cmake --build ./build -- -j6 \
+ && checkinstall --pkgname=libOpenCL-mingw-w64-x86-64 \
+    --pkgversion="2022.09.23.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# AMD Advanced Media Framework(AMF) SDK \
+ && mkdir -p /usr/x86_64-w64-mingw32/include/AMF \
+ && cp -r ./AMF-1.4.26/amf/public/include/* /usr/x86_64-w64-mingw32/include/AMF/ \
 # zlib
  && cd zlib-1.2.11 \
  && CFLAGS="-pipe -O3 -mtune=native -march=native" \
@@ -206,33 +241,35 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd .. \
 # AviSynthPlus
  && cd AviSynthPlus-3.7.2 \
- && mkdir avisynth-build \
- && cd avisynth-build \
- && cmake ../ \
+ && cmake \
+    -S ./ \
+    -B ./avisynth-build \
     -DHEADERS_ONLY:bool=on \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
- && make -j${THREADS} VersionGen \
+ && cmake --build ./avisynth-build --target VersionGen -- -j${THREADS} \
  && checkinstall --pkgname=libavisynth-mingw-w64-x86-64 \
     --pkgversion="3.7.2.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ../.. \
+    cmake --build ./avisynth-build --target install \
+ && cd .. \
 # aom
  && cd aom \
- && mkdir build-work \
- && cd build-work \
- && cmake ../ \
+ && cmake \
+    -S ./ \
+    -B ./build-work \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
- && make -j${THREADS} \
+ && cmake --build ./build-work -- -j${THREADS} \
  && checkinstall --pkgname=libaom-mingw-w64-x86-64 \
     --pkgversion="3.5.0.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ../.. \
+    cmake --build ./build-work --target install \
+ && cd .. \
 # x264
  && cd x264-stable \
  && ./configure \
@@ -249,19 +286,20 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd ..\
 # x265
  && cd x265_3.2.1 \
- && mkdir -p build/mingw \
- && cd build/mingw \
- && cmake ../../source \
+ && cmake \
+    -S ./source \
+    -B ./build/mingw \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DENABLE_SHARED=OFF \
- && make -j${THREADS} \
+ && cmake --build ./build/mingw -- -j${THREADS} \
  && checkinstall --pkgname=libx265-mingw-w64-x86-64 \
     --pkgversion="3.2.1.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ../../.. \
+    cmake --build ./build/mingw --target install \
+ && cd .. \
 # libpng
  && cd libpng-1.6.37 \
  && ./configure \
@@ -289,20 +327,20 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd .. \
 # libjpeg-turbo
  && cd libjpeg-turbo-2.1.4 \
- && mkdir libjpeg-turbo-build \
- && cd libjpeg-turbo-build \
- && cmake ../ \
-    -G"Unix Makefiles" \
+ && cmake \
+    -S ./ \
+    -B ./libjpeg-turbo-build \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DENABLE_SHARED=FALSE \
     -DENABLE_STATIC=TRUE \
- && make -j${THREADS} \
+ && cmake --build ./libjpeg-turbo-build -- -j${THREADS} \
  && checkinstall --pkgname=libjpeg-turbo-mingw-w64-x86-64 \
     --pkgversion="2.1.4.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ../.. \
+    cmake --build ./libjpeg-turbo-build --target install \
+ && cd .. \
 # giflib \
  && cd giflib-5.2.1 \
  && patch < ../giflib-5.2.1.patch \
@@ -424,20 +462,21 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd .. \
 # openjpeg
  && cd openjpeg-2.5.0 \
- && mkdir build \
- && cd build \
- && cmake ../ \
+ && cmake \
+    -S ./ \
+    -B ./build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_STATIC_LIBS=ON \
- && make -j${THREADS} \
+ && cmake --build ./build -- -j${THREADS} \
  && checkinstall --pkgname=libopenjpeg-mingw-w64-x86-64 \
     --pkgversion="2.5.0.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ../.. \
+    cmake --build ./build --target install \
+ && cd .. \
 # xvidcore
  && cd xvidcore/build/generic \
  && patch < ../../../xvidcore-1.3.7.patch \
@@ -503,9 +542,9 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd ffmpeg-5.1.1 \
  && ./configure \
     --ld=x86_64-w64-mingw32-g++ \
-    --extra-libs="-lvorbis -logg -ltasn1 -lhogweed -lnettle -lgmp -lunistring -lcrypt32 -lws2_32 -lpthread" \
-    --extra-cflags="-pipe -O3 -mtune=native -march=native -mfpmath=both" \
-    --extra-cxxflags="-pipe -O3 -mtune=native -march=native -mfpmath=both" \
+    --extra-libs="-lvorbis -logg -ltasn1 -lhogweed -lnettle -lgmp -lunistring -lcrypt32 -lws2_32 -lpthread -lOpenCL -lcfgmgr32 -lole32" \
+    --extra-cflags="-pipe -O3 -mtune=native -march=native -mfpmath=both -DWINVER=0x0A00" \
+    --extra-cxxflags="-pipe -O3 -mtune=native -march=native -mfpmath=both -DWINVER=0x0A00" \
     --extra-ldflags="-static" \
     --prefix=/usr/x86_64-w64-mingw32 \
     --cross-prefix=x86_64-w64-mingw32- \
@@ -535,6 +574,7 @@ RUN --mount=type=cache,target=/root/.ccache \
     --enable-libx264 \
     --enable-libx265 \
     --enable-libxvid \
+    --enable-opencl \
     --enable-zlib \
     --enable-bzlib \
     --disable-debug \
@@ -545,6 +585,7 @@ RUN --mount=type=cache,target=/root/.ccache \
  && checkinstall --pkgname=libffmpeg-mingw-w64-x86-64 \
     --pkgversion="5.1.1.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
- && cd ..
+ && cd .. \
+ && echo finish
 
 VOLUME ["/root/.ccache"]
