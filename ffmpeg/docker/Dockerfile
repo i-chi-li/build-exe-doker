@@ -575,6 +575,7 @@ RUN --mount=type=cache,target=/root/.ccache \
     --enable-libx265 \
     --enable-libxvid \
     --enable-opencl \
+    --enable-opengl \
     --enable-zlib \
     --enable-bzlib \
     --disable-debug \
