@@ -1,0 +1,27 @@
+--- CMakeLists.txt.org	2022-10-08 03:43:48.329150993 +0000
++++ CMakeLists.txt	2022-10-08 03:52:19.734699991 +0000
+@@ -220,15 +220,6 @@
+       target_compile_options(${TARGET} PRIVATE /EHs)
+     endif()
+   endif()
+-
+-  # For MinGW cross compile, statically link to the C++ runtime.
+-  # But it still depends on MSVCRT.dll.
+-  if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+-    if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+-      set_target_properties(${TARGET} PROPERTIES
+-        LINK_FLAGS -static -static-libgcc -static-libstdc++)
+-    endif()
+-  endif()
+ endfunction()
+ 
+ if(NOT COMMAND find_host_package)
+@@ -265,7 +256,7 @@
+ endif()
+ 
+ if(ENABLE_SPIRV_TOOLS_INSTALL)
+-  if(WIN32)
++  if(MSVC)
+     macro(spvtools_config_package_dir TARGET PATH)
+       set(${PATH} ${TARGET}/cmake)
+     endmacro()

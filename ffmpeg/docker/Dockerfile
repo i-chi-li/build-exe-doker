@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM ubuntu:jammy
 
+ARG USE_PROXY=NO
 ARG THREADS=6
 
 # disable "debconf: delaying package configuration, since apt-utils is not installed" message
@@ -9,9 +10,11 @@ ENV DEBCONF_NOWARNINGS=yes
 RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/var/cache/apt/archives \
     set -eu \
+ && if [ "${USE_PROXY}" = "YES" ]; then \
 # apt リポジトリをプロキシ経由に設定
- && echo 'Acquire::HTTP::Proxy "http://gateway.docker.internal:3142";' >> /etc/apt/apt.conf.d/01proxy \
- && echo 'Acquire::HTTPS::Proxy "false";' >> /etc/apt/apt.conf.d/01proxy \
+      echo 'Acquire::HTTP::Proxy "http://gateway.docker.internal:3142";' >> /etc/apt/apt.conf.d/01proxy; \
+      echo 'Acquire::HTTPS::Proxy "false";' >> /etc/apt/apt.conf.d/01proxy; \
+    fi \
 # apt インストール設定
  && echo 'APT::Install-Recommends 0;' >> /etc/apt/apt.conf.d/01norecommends \
  && echo 'APT::Install-Suggests 0;' >> /etc/apt/apt.conf.d/01norecommends \
@@ -23,6 +26,7 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
     mingw-w64-tools \
     make \
     cmake \
+    ninja-build \
     autoconf \
     automake \
     autopoint \
@@ -32,15 +36,19 @@ RUN --mount=type=cache,target=/var/lib/apt/lists \
     yasm \
     ccache \
     git \
+    ca-certificates \
+    curl \
     unzip \
     bzip2 \
     xz-utils \
-    vim \
+    neovim \
     ripgrep \
     # for x264
     wine \
     # for zlib
     checkinstall \
+    # for glslang
+    python3-dev \
 # mingw コマンドを ccache 経由で実行するリンクを生成
  && ln -s ../../bin/ccache /usr/lib/ccache/i686-w64-mingw32-cpp \
  && ln -s ../../bin/ccache /usr/lib/ccache/i686-w64-mingw32-c++ \
@@ -69,15 +77,39 @@ RUN --mount=type=cache,target=/root/.ccache \
     set -eu \
 # ccache を有効化
  && export PATH="/usr/lib/ccache:$PATH" \
-# OpenCL Headers \
+# Intel Media SDK(QSV)
+ && cd mfx_dispatch-1.35.1 \
+ && autoreconf -i \
+ && ./configure \
+    CFLAGS="-pipe -O3 -mtune=native -march=native" \
+    CPPFLAGS="-pipe -O3 -mtune=native -march=native" \
+    --prefix=/usr/x86_64-w64-mingw32 \
+    --host=x86_64-w64-mingw32 \
+    --disable-shared \
+ && make -j${THREADS} \
+ && checkinstall --pkgname=mfx_dispatch-mingw-w64-x86-64 \
+    --pkgversion="1.35.1.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+ && cd .. \
+# NVENC
+ && cd nv-codec-headers-n11.1.5.1 \
+ && make PREFIX=/usr/x86_64-w64-mingw32 \
+ && checkinstall --pkgname=nv-codec-headers-mingw-w64-x86-64 \
+    --pkgversion="11.1.5.1.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    make install PREFIX=/usr/x86_64-w64-mingw32 \
+ && cd .. \
+# OpenCL Headers
  && cd OpenCL-Headers-2022.09.23 \
  && cmake \
     -S ./ \
     -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
- && cmake --build ./build -- -j6 \
+ && cmake --build ./build -- -j${THREADS} \
  && checkinstall --pkgname=opencl-headers-mingw-w64-x86-64 \
     --pkgversion="2022.09.23.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
@@ -86,21 +118,114 @@ RUN --mount=type=cache,target=/root/.ccache \
 # OpenCL ICD Loader
  && cd OpenCL-ICD-Loader-2022.09.23 \
  && patch -p0 < ../OpenCL-ICD-Loader-2022.09.23.patch \
+ # WINVER=0x0A00 は、ビルドエラー回避のため。Windows10 用となる。
  && cmake \
     -S ./ \
     -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH=/usr/x86_64-w64-mingw32/include \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
     -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native -DWINVER=0x0A00" \
     -DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=OFF \
- && cmake --build ./build -- -j6 \
+ && cmake --build ./build -- -j${THREADS} \
  && checkinstall --pkgname=libOpenCL-mingw-w64-x86-64 \
     --pkgversion="2022.09.23.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
     cmake --build ./build --target install \
  && cd .. \
-# AMD Advanced Media Framework(AMF) SDK \
+# SPIR-V Headers
+ && cd SPIRV-Headers-sdk-1.3.224.1 \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
+    -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
+ && checkinstall --pkgname=spirv-headers-mingw-w64-x86-64 \
+    --pkgversion="1.3.224.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# SPIR-V Tools
+ && cd SPIRV-Tools-2022.3 \
+ && patch -p0 < ../SPIRV-Tools-2022.3.patch \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
+    -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
+    -DSPIRV_WERROR=OFF \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DSPIRV_TOOLS_BUILD_STATIC=ON \
+    -DSPIRV-Headers_SOURCE_DIR=/usr/x86_64-w64-mingw32 \
+ && cmake --build ./build -- -j${THREADS} \
+ && checkinstall --pkgname=spirv-tools-mingw-w64-x86-64 \
+    --pkgversion="2022.3.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# glslang
+ && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
+ && cd glslang-11.11.0 \
+ && patch -p0 < ../glslang-11.11.0.patch \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
+    -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
+    -DBUILD_SHARED_LIBS=OFF \
+ && cmake --build ./build -- -j${THREADS} \
+ && checkinstall --pkgname=glslang-mingw-w64-x86-64 \
+    --pkgversion="11.11.0.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+ && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-win32 \
+# Vulkan Headers
+ && cd Vulkan-Headers-1.3.230 \
+ && patch -p1 < ../Vulkan-Headers-1.3.230.patch \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+ && checkinstall --pkgname=vulkan-headers-mingw-w64-x86-64 \
+    --pkgversion="1.3.230.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# Vulkan Loader
+ && cd Vulkan-Loader-1.3.230 \
+ && patch -p1 < ../Vulkan-Loader-1.3.230.patch \
+ && cmake \
+    -S ./ \
+    -B ./build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
+    -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
+    -DENABLE_WERROR=OFF \
+    -DUSE_MASM=OFF \
+    -DBUILD_TESTS=OFF \
+ && cmake --build ./build -- -j${THREADS} \
+ && checkinstall --pkgname=vulkan-loader-mingw-w64-x86-64 \
+    --pkgversion="1.3.230.$(date +%Y%m%d)-0ubuntu1" \
+    --backup=no --deldoc=yes --fstrans=no --default \
+    cmake --build ./build --target install \
+ && cd .. \
+# AMD Advanced Media Framework(AMF) SDK
  && mkdir -p /usr/x86_64-w64-mingw32/include/AMF \
  && cp -r ./AMF-1.4.26/amf/public/include/* /usr/x86_64-w64-mingw32/include/AMF/ \
 # zlib
@@ -244,9 +369,11 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cmake \
     -S ./ \
     -B ./avisynth-build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DHEADERS_ONLY:bool=on \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
  && cmake --build ./avisynth-build --target VersionGen -- -j${THREADS} \
@@ -260,8 +387,10 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cmake \
     -S ./ \
     -B ./build-work \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
  && cmake --build ./build-work -- -j${THREADS} \
@@ -289,8 +418,11 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cmake \
     -S ./source \
     -B ./build/mingw \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../../TC-mingw.cmake \
+    # ソースディレクトリからの相対パスを指定する
+    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DCMAKE_CXX_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DENABLE_SHARED=OFF \
@@ -330,8 +462,10 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cmake \
     -S ./ \
     -B ./libjpeg-turbo-build \
+    -G "Ninja" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DENABLE_SHARED=FALSE \
     -DENABLE_STATIC=TRUE \
@@ -341,7 +475,7 @@ RUN --mount=type=cache,target=/root/.ccache \
     --backup=no --deldoc=yes --fstrans=no --default \
     cmake --build ./libjpeg-turbo-build --target install \
  && cd .. \
-# giflib \
+# giflib
  && cd giflib-5.2.1 \
  && patch < ../giflib-5.2.1.patch \
  && make \
@@ -396,7 +530,7 @@ RUN --mount=type=cache,target=/root/.ccache \
     --pkgversion="3.100.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
  && cd .. \
-# libogg \
+# libogg
  && cd libogg-1.3.5 \
  && ./configure \
     CFLAGS="-pipe -O3 -mtune=native -march=native" \
@@ -465,9 +599,10 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cmake \
     -S ./ \
     -B ./build \
+    -G "Ninja" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr/x86_64-w64-mingw32 \
-    -DCMAKE_TOOLCHAIN_FILE=../../TC-mingw.cmake \
+    -DCMAKE_TOOLCHAIN_FILE=../TC-mingw.cmake \
     -DCMAKE_C_FLAGS="-pipe -O3 -mtune=native -march=native" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_STATIC_LIBS=ON \
@@ -540,6 +675,8 @@ RUN --mount=type=cache,target=/root/.ccache \
  && cd .. \
 # ffmpeg
  && cd ffmpeg-5.1.1 \
+ # WINVER=0x0A00 は、本来不要だが、OpenCL ICD Loader で設定しているため、念のために追加している。Windows 10 用になる。
+ # --enable-libglslang は、vulkan を有効化するために必要
  && ./configure \
     --ld=x86_64-w64-mingw32-g++ \
     --extra-libs="-lvorbis -logg -ltasn1 -lhogweed -lnettle -lgmp -lunistring -lcrypt32 -lws2_32 -lpthread -lOpenCL -lcfgmgr32 -lole32" \
@@ -582,11 +719,21 @@ RUN --mount=type=cache,target=/root/.ccache \
     --disable-pthreads \
     --enable-static \
     --disable-shared \
+    --enable-libglslang \
+    --enable-vulkan \
+    --enable-libmfx \
  && make -j${THREADS} \
  && checkinstall --pkgname=libffmpeg-mingw-w64-x86-64 \
     --pkgversion="5.1.1.$(date +%Y%m%d)-0ubuntu1" \
     --backup=no --deldoc=yes --fstrans=no --default \
  && cd .. \
  && echo finish
+
+COPY .config/ /root/.config/
+
+RUN echo start \
+ && curl https://raw.githubusercontent.com/Shougo/dein.vim/master/bin/installer.sh > installer.sh \
+ && sh ./installer.sh /root/.cache/dein \
+ && vi --headless -c "call dein#install()" -c "q"
 
 VOLUME ["/root/.ccache"]
